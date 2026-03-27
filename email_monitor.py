@@ -165,7 +165,7 @@ def create_draft(
     Returns True on success.
     """
     import email.mime.text
-    from datetime import datetime
+    import email.utils
     import time
 
     subject = "פרטי הכניסה שלך לקורס גינון אקולוגי מורחב"
@@ -216,6 +216,16 @@ def create_draft(
         # Fallback if flag not found
         if not drafts_folder:
             drafts_folder = "INBOX.Drafts"
+
+        # Check if a draft for this recipient already exists — skip if so
+        mail.select(drafts_folder)
+        _, search_data = mail.uid("search", None, f'(TO "{to_address}")')
+        if search_data and search_data[0]:
+            existing = search_data[0].split()
+            if existing:
+                logger.info("Draft for %s already exists — skipping duplicate.", to_address)
+                mail.logout()
+                return True
 
         result = mail.append(
             drafts_folder,
