@@ -200,20 +200,35 @@ def create_draft(
             mail = imaplib.IMAP4(imap_host, imap_port)
         mail.login(email_address, email_password)
 
-        # Try common Drafts folder names
-        for drafts_folder in ("Drafts", "INBOX.Drafts", "[Gmail]/Drafts", "草稿"):
-            result = mail.append(
-                drafts_folder,
-                "\\Draft",
-                imaplib.Time2Internaldate(time.time()),
-                raw_message,
-            )
-            if result[0] == "OK":
-                logger.info("Draft saved to folder '%s' for %s", drafts_folder, to_address)
-                mail.logout()
-                return True
+        # Find the real Drafts folder by its \Drafts flag
+        drafts_folder = None
+        _, folder_list = mail.list()
+        for item in folder_list or []:
+            decoded = item.decode() if isinstance(item, bytes) else item
+            if "\\Drafts" in decoded or "\\drafts" in decoded.lower():
+                # Extract folder name: last quoted or unquoted token after " / "
+                parts = decoded.split('"/"')
+                folder_name = parts[-1].strip().strip('"')
+                if folder_name:
+                    drafts_folder = folder_name
+                    break
 
-        logger.warning("Could not find a Drafts folder; draft not saved.")
+        # Fallback if flag not found
+        if not drafts_folder:
+            drafts_folder = "INBOX.Drafts"
+
+        result = mail.append(
+            drafts_folder,
+            "\\Draft",
+            imaplib.Time2Internaldate(time.time()),
+            raw_message,
+        )
+        if result[0] == "OK":
+            logger.info("Draft saved to folder '%s' for %s", drafts_folder, to_address)
+            mail.logout()
+            return True
+
+        logger.warning("Could not save draft to folder '%s'.", drafts_folder)
         mail.logout()
         return False
     except Exception as exc:
