@@ -15,7 +15,7 @@ import logging
 
 import config
 from email_monitor import fetch_new_purchase_emails, create_draft
-from wordpress_agent import WordPressAgent
+from wordpress_automation import WordPressAgent
 
 # ---------------------------------------------------------------------------
 # Logging setup

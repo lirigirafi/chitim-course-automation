@@ -8,34 +8,12 @@ import imaplib
 import email
 import email.header
 import email.utils
-import json
-import os
 import re
 import logging
 from datetime import datetime, timezone, timedelta
 from email.policy import default as default_policy
 
 logger = logging.getLogger(__name__)
-
-PROCESSED_UIDS_FILE = os.path.join(os.path.dirname(__file__), "processed_uids.json")
-
-
-def _load_processed_uids() -> set:
-    if os.path.exists(PROCESSED_UIDS_FILE):
-        try:
-            with open(PROCESSED_UIDS_FILE, "r") as f:
-                return set(json.load(f))
-        except Exception:
-            pass
-    return set()
-
-
-def _save_processed_uid(uid: str) -> None:
-    uids = _load_processed_uids()
-    uids.add(uid)
-    with open(PROCESSED_UIDS_FILE, "w") as f:
-        json.dump(list(uids), f)
-
 
 SENDER_FILTER = "support@grow.security"
 REQUIRED_PHRASE = "רכישת כניסה לקורס הגינון האקולוגי מורחב"
@@ -127,13 +105,8 @@ def fetch_new_purchase_emails(
         uids = data[0].split()
         logger.info("Found %d email(s) from sender.", len(uids))
 
-        processed_uids = _load_processed_uids()
-
         for uid in uids:
             uid_str = uid.decode() if isinstance(uid, bytes) else str(uid)
-            if uid_str in processed_uids:
-                logger.info("UID %s: already processed, skipping.", uid_str)
-                continue
 
             status, msg_data = mail.uid("fetch", uid, "(RFC822)")
             if status != "OK":
@@ -170,10 +143,9 @@ def fetch_new_purchase_emails(
             username = purchaser_email.split("@")[0]
             logger.info("UID %s: purchase detected for %s (username: %s)", uid, purchaser_email, username)
 
-            # Mark as seen and save UID locally so we never process it again
+            # Mark as seen
             store_res = mail.uid("store", uid, "+FLAGS", "(\\Seen)")
             logger.info("UID %s: marked as seen — %s", uid_str, store_res[0])
-            _save_processed_uid(uid_str)
 
             results.append(
                 {
