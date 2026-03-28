@@ -169,8 +169,8 @@ class WordPressAgent:
                             return row ? row.id.replace('user-', '') : null;
                         }"""
                     )
-                    if not user_id:
-                        raise Exception("Could not find user ID for '%s' in users list" % username)
+                    if not user_id or not str(user_id).isdigit():
+                        raise Exception("Could not find numeric user ID for '%s' in users list" % username)
                     logger.info("Resolved user ID %s for '%s' from users list.", user_id, username)
 
                 # --- Navigate to enrollment page ---

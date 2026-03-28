@@ -7,11 +7,33 @@ and checks for the Hebrew purchase phrase.
 import imaplib
 import email
 import email.header
+import json
+import os
 import re
 import logging
 from email.policy import default as default_policy
 
 logger = logging.getLogger(__name__)
+
+PROCESSED_UIDS_FILE = os.path.join(os.path.dirname(__file__), "processed_uids.json")
+
+
+def _load_processed_uids() -> set:
+    if os.path.exists(PROCESSED_UIDS_FILE):
+        try:
+            with open(PROCESSED_UIDS_FILE, "r") as f:
+                return set(json.load(f))
+        except Exception:
+            pass
+    return set()
+
+
+def _save_processed_uid(uid: str) -> None:
+    uids = _load_processed_uids()
+    uids.add(uid)
+    with open(PROCESSED_UIDS_FILE, "w") as f:
+        json.dump(list(uids), f)
+
 
 # SENDER_FILTER = "support@grow.security"
 SENDER_FILTER = "liri.girafi@gmail.com"
@@ -106,7 +128,14 @@ def fetch_new_purchase_emails(
         uids = all_uids[-10:]
         logger.info("Found %d email(s) from sender (checking last %d).", len(all_uids), len(uids))
 
+        processed_uids = _load_processed_uids()
+
         for uid in uids:
+            uid_str = uid.decode() if isinstance(uid, bytes) else str(uid)
+            if uid_str in processed_uids:
+                logger.info("UID %s: already processed, skipping.", uid_str)
+                continue
+
             status, msg_data = mail.uid("fetch", uid, "(RFC822)")
             if status != "OK":
                 continue
@@ -127,8 +156,10 @@ def fetch_new_purchase_emails(
             username = purchaser_email.split("@")[0]
             logger.info("UID %s: purchase detected for %s (username: %s)", uid, purchaser_email, username)
 
-            # Mark as seen so we don't process it twice
-            mail.uid("store", uid, "+FLAGS", "\\Seen")
+            # Mark as seen and save UID locally so we never process it again
+            store_res = mail.uid("store", uid, "+FLAGS", "(\\Seen)")
+            logger.info("UID %s: marked as seen — %s", uid_str, store_res[0])
+            _save_processed_uid(uid_str)
 
             results.append(
                 {
@@ -218,27 +249,35 @@ def create_draft(
             drafts_folder = "INBOX.Drafts"
 
         # Check if a draft for this recipient already exists — skip if so
-        mail.select(drafts_folder)
-        _, search_data = mail.uid("search", None, f'(TO "{to_address}")')
-        if search_data and search_data[0]:
-            existing = search_data[0].split()
-            if existing:
-                logger.info("Draft for %s already exists — skipping duplicate.", to_address)
+        sel_status, _ = mail.select(drafts_folder)
+        if sel_status == "OK":
+            _, search_data = mail.uid("search", None, f'(TO "{to_address}")')
+            if search_data and search_data[0]:
+                existing = search_data[0].split()
+                if existing:
+                    logger.info("Draft for %s already exists — skipping duplicate.", to_address)
+                    mail.logout()
+                    return True
+            # Close selected mailbox before appending
+            try:
+                mail.close()
+            except Exception:
+                pass
+
+        for folder in [drafts_folder, "Drafts", "INBOX.Drafts"]:
+            result = mail.append(
+                folder,
+                "\\Draft",
+                imaplib.Time2Internaldate(time.time()),
+                raw_message,
+            )
+            logger.info("APPEND to '%s': %s", folder, result)
+            if result[0] == "OK":
+                logger.info("Draft saved to folder '%s' for %s", folder, to_address)
                 mail.logout()
                 return True
 
-        result = mail.append(
-            drafts_folder,
-            "\\Draft",
-            imaplib.Time2Internaldate(time.time()),
-            raw_message,
-        )
-        if result[0] == "OK":
-            logger.info("Draft saved to folder '%s' for %s", drafts_folder, to_address)
-            mail.logout()
-            return True
-
-        logger.warning("Could not save draft to folder '%s'.", drafts_folder)
+        logger.warning("Could not save draft to any folder.")
         mail.logout()
         return False
     except Exception as exc:
