@@ -7,10 +7,12 @@ and checks for the Hebrew purchase phrase.
 import imaplib
 import email
 import email.header
+import email.utils
 import json
 import os
 import re
 import logging
+from datetime import datetime, timezone, timedelta
 from email.policy import default as default_policy
 
 logger = logging.getLogger(__name__)
@@ -35,8 +37,7 @@ def _save_processed_uid(uid: str) -> None:
         json.dump(list(uids), f)
 
 
-# SENDER_FILTER = "support@grow.security"
-SENDER_FILTER = "liri.girafi@gmail.com"
+SENDER_FILTER = "support@grow.security"
 REQUIRED_PHRASE = "רכישת כניסה לקורס הגינון האקולוגי מורחב"
 
 
@@ -140,10 +141,25 @@ def fetch_new_purchase_emails(
 
             raw = msg_data[0][1]
             msg = email.message_from_bytes(raw, policy=default_policy)
+
+            # Skip emails older than 15 minutes
+            date_str = msg.get("Date", "")
+            try:
+                msg_time = email.utils.parsedate_to_datetime(date_str)
+                if msg_time.tzinfo is None:
+                    msg_time = msg_time.replace(tzinfo=timezone.utc)
+                age = datetime.now(timezone.utc) - msg_time
+                if age > timedelta(minutes=15):
+                    logger.info("UID %s: email is %d min old, skipping.", uid_str, int(age.total_seconds() / 60))
+                    continue
+            except Exception:
+                logger.warning("UID %s: could not parse date '%s', processing anyway.", uid_str, date_str)
+
             body = get_email_body(msg)
 
             if REQUIRED_PHRASE not in body:
-                logger.debug("UID %s: required phrase not found, skipping.", uid)
+                logger.info("UID %s: required phrase not found — marking as unread.", uid_str)
+                mail.uid("store", uid, "-FLAGS", "(\\Seen)")
                 continue
 
             purchaser_email = extract_purchaser_email(body)

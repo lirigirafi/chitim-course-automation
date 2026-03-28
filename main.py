@@ -12,7 +12,6 @@ Flow:
 """
 
 import logging
-import time
 
 import config
 from email_monitor import fetch_new_purchase_emails, create_draft
@@ -125,42 +124,33 @@ def run() -> None:
         headless=True,
     )
 
-    logger.info(
-        "Agent started. Checking email every %d seconds. Press Ctrl+C to stop.",
-        CHECK_INTERVAL,
-    )
+    logger.info("Agent started.")
 
-    while True:
-        try:
-            logger.info("Checking inbox …")
-            records = fetch_new_purchase_emails(
-                imap_host=IMAP_HOST,
-                imap_port=IMAP_PORT,
-                email_address=EMAIL_ADDRESS,
-                email_password=EMAIL_PASSWORD,
-            )
+    try:
+        logger.info("Checking inbox …")
+        records = fetch_new_purchase_emails(
+            imap_host=IMAP_HOST,
+            imap_port=IMAP_PORT,
+            email_address=EMAIL_ADDRESS,
+            email_password=EMAIL_PASSWORD,
+        )
 
-            if not records:
-                logger.info("No new purchase emails found.")
-            else:
-                for record in records:
-                    try:
-                        process_email(record, agent)
-                    except Exception as exc:
-                        logger.exception(
-                            "Unhandled error processing email UID %s: %s",
-                            record.get("uid"),
-                            exc,
-                        )
+        if not records:
+            logger.info("No new purchase emails found.")
+        else:
+            for record in records:
+                try:
+                    process_email(record, agent)
+                except Exception as exc:
+                    logger.exception(
+                        "Unhandled error processing email UID %s: %s",
+                        record.get("uid"),
+                        exc,
+                    )
+    except Exception as exc:
+        logger.exception("Unexpected error: %s", exc)
 
-        except KeyboardInterrupt:
-            logger.info("Stopped by user.")
-            break
-        except Exception as exc:
-            logger.exception("Unexpected error in main loop: %s", exc)
-
-        logger.info("Sleeping %d seconds …", CHECK_INTERVAL)
-        time.sleep(CHECK_INTERVAL)
+    logger.info("Done.")
 
 
 if __name__ == "__main__":
