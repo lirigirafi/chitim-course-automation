@@ -29,7 +29,7 @@ Automation script that monitors an email inbox, creates a WordPress user, enroll
 
 ```bash
 # 1. Clone / navigate to the project folder
-cd chitim-course-agent
+cd chitim-course-automation
 
 # 2. Create a virtual environment
 python -m venv .venv
@@ -76,7 +76,7 @@ Grant the Lambda execution role `secretsmanager:GetSecretValue` on the secret AR
 
 ---
 
-## Running the agent
+## Running the automation
 
 ### Locally
 ```bash
@@ -94,7 +94,7 @@ Deploy as a Lambda function and trigger it with **EventBridge** on a schedule (e
 ## Project structure
 
 ```
-chitim-course-agent/
+chitim-course-automation/
 ├── main.py              # Entry point — runs once per invocation
 ├── email_monitor.py     # IMAP polling, phrase detection, draft creation
 ├── wordpress_automation.py  # Playwright automation (user creation + enrollment)
@@ -111,5 +111,5 @@ chitim-course-agent/
 All activity is printed to stdout with timestamps:
 
 ```bash
-python main.py >> agent.log 2>&1
+python main.py >> raw.log 2>&1
 ```
