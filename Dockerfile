@@ -1,12 +1,16 @@
-FROM mcr.microsoft.com/playwright/python:v1.40.0-jammy
+FROM public.ecr.aws/lambda/python:3.12
 
-# Copy your code
-COPY . /var/task
-WORKDIR /var/task
+# Install Playwright system dependencies
+RUN dnf install -y atk cups-libs gtk3 libXcomposite alsa-lib \
+    libXcursor libXdamage libXext libXi libXrandr libXScrnSaver \
+    libXtst pango at-spi2-atk libXt xorg-x11-server-Xvfb \
+    xorg-x11-xauth dbus-glib dbus-x11 nss mesa-libgbm && \
+    dnf clean all
 
-# Install dependencies
+COPY requirements.txt .
 RUN pip install -r requirements.txt
 RUN playwright install chromium
 
-# Command to run your lambda handler
-CMD [ "main.lambda_handler" ]
+COPY main.py email_monitor.py wordpress_automation.py config.py ./
+
+CMD ["main.lambda_handler"]
